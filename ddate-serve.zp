@@ -1,0 +1,42 @@
+(load "datetime/datetime")
+(load "html/html")
+(load "json/json")
+
+(import-all "datetime")
+(import-all "html")
+
+(define (wrap content-type data)
+  (++ "HTTP/1.1 200 OK\r\nContent-Length: " (->string (length data))
+      "\r\nContent-Type: " content-type  "\r\nConnection: close\r\n\r\n"
+      data "\r\n\r\n"))
+
+(define (get-ddate)
+  (datetime:ddate-from-timestamp (car (unix-timestamp))))
+
+(define (ddate-html)
+  (html:build (html:with-skeleton
+    (make-hash :head #{:tags (#{:name "title" :text "The current ddate"})}
+               :body (make-hash :tags (list (make-hash :name "h1"
+                                                       :attributes (make-hash "style" heading-style)
+                                                       :text (++ "It's " (get-ddate)))))))))
+
+(define (ddate-json)
+  (json:dump (make-hash "ddate" (get-ddate))))
+
+(define (serve)
+    (begin
+      (net:listen sock)
+      (let* ((conn-data  (net:accept sock))
+             (conn       (car conn-data))
+             (req        (net:recv conn (make-small 1000)))
+             (first-line (car (string:split (byte-vector->string req) "\r\n"))))
+        (if (in? first-line "/json")
+          (net:send conn (string->byte-vector (wrap "application/json" (ddate-json))))
+          (net:send conn (string->byte-vector (wrap "text/html" (ddate-html))))))))
+
+(define sock (net:socket "stream"))
+(define heading-style
+  (++ "font-weight:400;left:0;line-height:200px;text-align:center;"
+      "margin-top:-100px;position:absolute;top:50%;width:100%;"))
+(net:bind-socket sock (net:get-addr-info "0.0.0.0" "5000"))
+(forever (serve))
